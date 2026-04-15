@@ -1,0 +1,13 @@
+figure; hold on
+plot(world_energy.year, world_energy.low_carbon_share_energy)
+plot(world_energy.year, world_energy.fossil_share_energy)
+plot(world_energy.year, world_energy.nuclear_share_energy)
+plot(world_energy.year, world_energy.wind_share_energy)
+plot(world_energy.year, world_energy.solar_share_energy)
+plot(world_energy.year, world_energy.hydro_share_energy)
+
+xlabel('Year')
+ylabel('Percentage')
+%legend('Low-carbon share', 'Fossil share','Nuclear share','Wind share','Solar share','Hydro share')
+legend('Low-carbon share', 'Nuclear share','Wind share','Solar share','Hydro share')
+
