@@ -172,7 +172,7 @@ grid on;
 
 % Post-hoc osszehasonlitas (itt 2 csoportnal megegyezik a fo teszttel,
 % de altalanosabban hasznalhato)
-figure('Name', 'Post-hoc osszehasonlitas');
+figure('Name', 'Post-hoc osszehasonlitas'); hold on
 multcompare(stats);
 
 % Opcionális export
