@@ -1,3 +1,4 @@
+
 %% ANOVA kontinensek szerint: low_carbon_share_energy (2010-2023)
 % Csoportositas: Eszak-Amerika, Del-Amerika, Europa, Azsia, Oceania
 % Egyseg: orszagonkenti idoszaki atlag (1 sor/orszag)

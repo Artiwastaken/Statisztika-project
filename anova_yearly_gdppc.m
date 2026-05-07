@@ -116,7 +116,6 @@ eta_sq           = NaN(n_years, 1);
 cont_means       = NaN(n_years, n_cont);   % sor=ev, oszlop=kontinens
 cont_stds        = NaN(n_years, n_cont);
 cont_ns          = NaN(n_years, n_cont);
-cont_pop_w_gdppc = NaN(n_years, n_cont);   % nepesseg-sulyozott GDP/fo
 
 fprintf('\n=== Eves ANOVA: GDP/fo kontinensenkent ===\n');
 fprintf('Idoszak: %d - %d\n', year_start, year_end);
@@ -145,47 +144,56 @@ for yi = 1:n_years
         continue;
     end
 
-    % ANOVA
+    % ANOVA (nepesseg-sulyozott)
+    pop_yr = F_yr.population;
     try
-        [p_yr, ~, stats_yr] = anova1(y_yr, grp_yr, 'off');
+        tbl_anova = table(grp_yr, y_yr, pop_yr, 'VariableNames', {'continent', 'gdp_per_capita', 'pop'});
+        lm_yr = fitlm(tbl_anova, 'gdp_per_capita ~ continent', 'Weights', tbl_anova.pop);
+        at_yr = anova(lm_yr);
+        p_yr  = at_yr.pValue(1);
     catch
         continue;
     end
 
-    % Eta^2
-    [G2_yr, ~] = findgroups(grp_yr);
-    gm_yr   = splitapply(@mean, y_yr, G2_yr);
-    gc_yr   = splitapply(@numel, y_yr, G2_yr);
-    grand_m = mean(y_yr);
-    SS_b    = sum(gc_yr .* (gm_yr - grand_m).^2);
-    SS_t    = sum((y_yr - grand_m).^2);
-    eta2_yr = SS_b / SS_t;
+    % Eta^2 (nepesseg-sulyozott)
+    grand_m_w = sum(pop_yr .* y_yr) / sum(pop_yr);
+    SS_t_w = sum(pop_yr .* (y_yr - grand_m_w).^2);
+    SS_b_w = 0;
+    ugrps2 = unique(cellstr(grp_yr));
+    for ci2 = 1:numel(ugrps2)
+        mask_c2 = strcmp(cellstr(grp_yr), ugrps2{ci2});
+        pop_c2  = pop_yr(mask_c2);
+        y_c2    = y_yr(mask_c2);
+        if sum(pop_c2) > 0
+            mean_c2 = sum(pop_c2 .* y_c2) / sum(pop_c2);
+            SS_b_w  = SS_b_w + sum(pop_c2) * (mean_c2 - grand_m_w)^2;
+        end
+    end
+    eta2_yr = SS_b_w / SS_t_w;
 
     p_values(yi) = p_yr;
     eta_sq(yi)   = eta2_yr;
 
     fprintf('%-6d  %10.6f  %8.4f\n', yr, p_yr, eta2_yr);
 
-    % Csoport-atlagok mentese (rogzitett sorrend: cont_names)
+    % Csoport-atlagok mentese (rogzitett sorrend: cont_names) – nepesseg-sulyozott
     for ci = 1:n_cont
-        mask_c = strcmp(cellstr(grp_yr), cont_names{ci});
+        mask_c  = strcmp(cellstr(grp_yr), cont_names{ci});
         if sum(mask_c) >= 1
-            cont_means(yi, ci) = mean(y_yr(mask_c));
-            cont_stds(yi, ci)  = std(y_yr(mask_c));
-            cont_ns(yi, ci)    = sum(mask_c);
-            % Nepesseg-sulyozott GDP/fo: sum(GDP) / sum(nepesseg)
-            pop_c = F_yr.population(mask_c);
-            gdp_c = F_yr.gdp(mask_c);
+            pop_c   = pop_yr(mask_c);
             tot_pop = sum(pop_c);
             if tot_pop > 0
-                cont_pop_w_gdppc(yi, ci) = sum(gdp_c) / tot_pop;
+                cont_means(yi, ci) = sum(pop_c .* y_yr(mask_c)) / tot_pop;
+                w_c = pop_c / tot_pop;
+                cont_stds(yi, ci)  = sqrt(sum(w_c .* (y_yr(mask_c) - cont_means(yi, ci)).^2));
+                cont_ns(yi, ci)    = sum(mask_c);
             end
         end
     end
 end
 
 % -------------------------------------------------------------------------
-% Vizualizacio – egy tabfules figure (5 ful)
+% Vizualizacio – egy tabfules figure (4 ful)
 % -------------------------------------------------------------------------
 colors = lines(n_cont);
 
@@ -244,8 +252,8 @@ title(ax3, sprintf('Effektusmeret (eta^2) (%d–%d)', year_start, year_end));
 ylim(ax3, [0, min(1, max(eta_sq(valid_e)) * 1.15)]);
 grid(ax3, 'on');
 
-% --- Tab 4: Heatmap – orszag-atlag alapu relativ elteres ---
-tab4 = uitab(tg, 'Title', 'Heatmap (atlag)');
+% --- Tab 4: Heatmap – nepesseg-sulyozott relativ elteres ---
+tab4 = uitab(tg, 'Title', 'Heatmap (sulyozott)');
 ax4  = axes(tab4);
 rel_diff = NaN(n_years, n_cont);
 for yi = 1:n_years
@@ -267,42 +275,11 @@ if sum(valid_rows) >= 2
              'YTickLabel', yrs_valid(1:ytick_step:end));
     xlabel(ax4, 'Kontinens');
     ylabel(ax4, 'Ev');
-    title(ax4, {'GDP/fo relativ elteres a kontinens-atlagtol (%, egyenlo suly)'; ...
+    title(ax4, {'GDP/fo relativ elteres a nepesseg-sulyozott kontinens-atlagtol (%)'; ...
                sprintf('(%d–%d)', year_start, year_end)});
     clim_val = max(abs(rel_diff(valid_rows,:)), [], 'all', 'omitnan');
     if ~isnan(clim_val) && clim_val > 0
         clim(ax4, [-clim_val, clim_val]);
-    end
-end
-
-% --- Tab 5: Heatmap – nepesseg-sulyozott GDP/fo relativ elteres ---
-tab5 = uitab(tg, 'Title', 'Heatmap (sulyozott)');
-ax5  = axes(tab5);
-rel_diff_w = NaN(n_years, n_cont);
-for yi = 1:n_years
-    row_w = cont_pop_w_gdppc(yi, :);
-    if all(isnan(row_w)), continue; end
-    gm_w = nanmean(row_w);
-    if gm_w == 0, continue; end
-    rel_diff_w(yi, :) = (row_w - gm_w) / gm_w * 100;
-end
-valid_rows_w = ~all(isnan(rel_diff_w), 2);
-if sum(valid_rows_w) >= 2
-    imagesc(ax5, rel_diff_w(valid_rows_w, :));
-    colormap(ax5, redblue_colormap());
-    colorbar(ax5);
-    set(ax5, 'XTick', 1:n_cont, 'XTickLabel', cont_names, 'XTickLabelRotation', 30);
-    yrs_valid_w = years(valid_rows_w);
-    ytick_step_w = max(1, floor(numel(yrs_valid_w) / 10));
-    set(ax5, 'YTick', 1:ytick_step_w:numel(yrs_valid_w), ...
-             'YTickLabel', yrs_valid_w(1:ytick_step_w:end));
-    xlabel(ax5, 'Kontinens');
-    ylabel(ax5, 'Ev');
-    title(ax5, {'GDP/fo relativ elteres a nepesseg-sulyozott globalatlagtol (%)'; ...
-               sprintf('(%d–%d)', year_start, year_end)});
-    clim_val_w = max(abs(rel_diff_w(valid_rows_w,:)), [], 'all', 'omitnan');
-    if ~isnan(clim_val_w) && clim_val_w > 0
-        clim(ax5, [-clim_val_w, clim_val_w]);
     end
 end
 
